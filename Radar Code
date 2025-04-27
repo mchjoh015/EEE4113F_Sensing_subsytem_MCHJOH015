@@ -1,0 +1,88 @@
+import processing.serial.*;
+
+Serial myPort;
+String data = "";
+int angle = 0, distance = 0;
+PFont radarFont;
+
+void setup() {
+  size(1400, 800);  // Large screen for better visibility
+  myPort = new Serial(this, "COM4", 9600);
+  myPort.bufferUntil('.');
+  radarFont = createFont("Arial", 24, true);
+}
+
+void draw() {
+  background(0);
+  drawRadar();
+  drawDetectionLine();
+  drawObject();
+  drawText();
+}
+
+void serialEvent(Serial myPort) {
+  data = myPort.readStringUntil('.');
+  if (data != null) {
+    String[] values = trim(split(data, ','));
+    if (values.length == 2) {
+      angle = int(values[0]);
+      distance = int(values[1]);
+    }
+  }
+}
+
+void drawRadar() {
+  pushMatrix();
+  translate(width / 2, height - 100);
+  stroke(98, 245, 31);
+  strokeWeight(3);
+  noFill();
+  
+  float maxRadius = 500; // **Expanded radar size**
+  
+  for (int i = 1; i <= 4; i++) {
+    ellipse(0, 0, i * maxRadius / 2, i * maxRadius / 2);
+  }
+  
+  for (int i = 0; i <= 180; i += 30) {
+    line(0, 0, maxRadius * cos(radians(i)), -maxRadius * sin(radians(i)));
+  }
+  
+  popMatrix();
+}
+
+void drawObject() {
+  pushMatrix();
+  translate(width / 2, height - 100);
+  stroke(255, 10, 10);
+  strokeWeight(8);
+  
+  if (distance <= 100) {  // **Extended detection range to 1 meter**
+    float pixDist = map(distance, 0, 100, 0, 500); // **Scaled to new radar size**
+    float x = pixDist * cos(radians(angle));
+    float y = -pixDist * sin(radians(angle));
+    
+    // Draw an "X" at the detected position
+    line(x - 10, y - 10, x + 10, y + 10);
+    line(x - 10, y + 10, x + 10, y - 10);
+  }
+  
+  popMatrix();
+}
+
+void drawDetectionLine() {
+  pushMatrix();
+  translate(width / 2, height - 100);
+  stroke(30, 250, 60);
+  strokeWeight(6);
+  line(0, 0, 500 * cos(radians(angle)), -500 * sin(radians(angle)));
+  popMatrix();
+}
+
+void drawText() {
+  fill(98, 245, 31);
+  textFont(radarFont);
+  textSize(28);
+  text("Angle: " + angle + "°", 50, height - 50);
+  text("Distance: " + (distance <= 100 ? distance + " cm" : "Out of Range"), 250, height - 50);
+}
