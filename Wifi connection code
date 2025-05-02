@@ -1,0 +1,57 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+
+const char* ssid = "Esp32";          // Replace with your SSID
+const char* password = "onetwothree";  // Replace with your Wi-Fi password
+
+const String serverName = "http://172.20.10.5/log";  // Replace with your server IP or URL
+
+void setup() {
+  Serial.begin(115200);  // Set baud rate for Serial Monitor
+
+  // Start WiFi connection
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+
+  unsigned long startAttemptTime = millis();
+
+  // Wait for WiFi to connect for up to 10 seconds
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
+    Serial.print(".");
+    delay(500);  // Check every 500ms
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected to WiFi!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\nFailed to connect to WiFi");
+    Serial.print("WiFi Status: ");
+    Serial.println(WiFi.status());
+    // Optionally, you can reset or attempt to reconnect here
+  }
+}
+
+void loop() {
+  // For testing, we can send data to the server when the ESP is connected
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(serverName);
+    int httpResponseCode = http.GET(); // Send GET request
+
+    if (httpResponseCode > 0) {
+      Serial.print("HTTP Response code: ");
+      Serial.println(httpResponseCode);
+    } else {
+      Serial.print("Error code: ");
+      Serial.println(httpResponseCode);
+    }
+
+    http.end();
+  } else {
+    Serial.println("WiFi Disconnected!");
+  }
+
+  delay(10000);  // Wait for 10 seconds before repeating the loop
+}
