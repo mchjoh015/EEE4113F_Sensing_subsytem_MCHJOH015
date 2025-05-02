@@ -1,78 +1,68 @@
-#include <Servo.h> // Include the Servo library
+#include <ESP32Servo.h>  // Servo library
 
-// Define Ultrasonic Sensor pins
-const int TRIG_PIN = 10;
-const int ECHO_PIN = 11;
-const int SERVO_PIN = 12;
-const int RED_LED_PIN = 9; // Define Red LED pin
+// Pin definitions
+const int SERVO_PIN = 12;  // Servo signal pin
+const int TRIG_PIN = 14;   // HC-SR04 Trig pin
+const int ECHO_PIN = 27;   // HC-SR04 Echo pin
 
-// Variables for distance measurement
-long pulseDuration;
-int measuredDistance;
-int currentAngle;
-int objectStartAngle = -1;
-int objectEndAngle = -1;
-int minDistance = 100; // Track minimum distance to estimate height
-Servo servoMotor; // Servo object for controlling the motor
-const float ANGLE_TO_CM = 0.5; // Conversion factor for width estimation
+Servo myServo;  // Create servo object
 
 void setup() {
-    pinMode(TRIG_PIN, OUTPUT);
-    pinMode(ECHO_PIN, INPUT);
-    pinMode(RED_LED_PIN, OUTPUT); // Set LED pin as output
-    digitalWrite(RED_LED_PIN, LOW); // Ensure LED is off initially
-    Serial.begin(9600);
-    servoMotor.attach(SERVO_PIN);
+  Serial.begin(115200);
+  myServo.attach(SERVO_PIN);
+  
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
 }
 
 void loop() {
-    scanArea();
-}
+  // Sweep from 0 to 180 degrees
+  for (int angle = 0; angle <= 180; angle++) {
+    myServo.write(angle);
+    delay(15);  // Small delay for smooth movement
 
-// Function to rotate servo and measure distance
-void scanArea() {
-    minDistance = 100; // Reset min distance before scanning
-    objectStartAngle = -1; // Reset object angles before scanning
-    objectEndAngle = -1; // Reset object angles before scanning
-    
-    for (int angle = 0; angle <= 180; angle += 10) { // Increase step size for faster movement
-        moveServoAndMeasure(angle);
-    }
-    
-    for (int angle = 180; angle >= 0; angle -= 10) { // Increase step size for faster movement
-        moveServoAndMeasure(angle);
-    }
-    
-}
-
-// Function to move the servo and measure distance
-void moveServoAndMeasure(int angle) {
-    servoMotor.write(angle);
-    currentAngle = angle;
-    delay(500); // Reduced delay for quicker servo movement
-    measuredDistance = getDistance();
-    
-    // Print the current angle and distance for debugging
-    Serial.print(getAngle());
+    long distance = measureDistance();  // Measure the distance
+    Serial.print(angle);
     Serial.print(",");
-    Serial.print(measuredDistance);
+    Serial.print(distance);
     Serial.println(".");
+  }
+  
+  // Sweep back from 180 to 0 degrees
+  for (int angle = 180; angle >= 0; angle--) {
+    myServo.write(angle);
+    delay(15);
+
+    long distance = measureDistance();
+    Serial.print(angle);
+    Serial.print(",");
+    Serial.print(distance);
+    Serial.println(".");
+  }
 }
 
-// Function to measure distance using the ultrasonic sensor
-int getDistance() {
-    digitalWrite(TRIG_PIN, LOW);
-    delayMicroseconds(2);
-    digitalWrite(TRIG_PIN, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(TRIG_PIN, LOW);
-    
-    // Read the pulse duration, with a timeout for safety
-    pulseDuration = pulseIn(ECHO_PIN, HIGH, 20000); // 20ms timeout
-    return pulseDuration * 0.034 / 2; // Convert time to distance (cm)
+// Function to measure distance using HC-SR04
+long measureDistance() {
+  // Clear trigger
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+
+  // Set trigger HIGH for 10 microseconds
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  // Read echo
+  long duration = pulseIn(ECHO_PIN, HIGH, 25000); // timeout after 25ms
+  
+  // Calculate distance in cm
+  long distanceCm = duration * 0.0343 / 2;
+
+  // If out of range (> 400 cm for HC-SR04), cap it
+  if (distanceCm == 0 || distanceCm > 400) {
+    distanceCm = 400; 
+  }
+  
+  return distanceCm;
 }
 
-// Function to get the current servo angle
-int getAngle() {
-    return currentAngle;
-}
