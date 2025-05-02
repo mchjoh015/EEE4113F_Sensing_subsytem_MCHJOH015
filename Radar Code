@@ -1,75 +1,159 @@
-import processing.serial.*;
+import processing.serial.*;     // Import the serial library for communication with Arduino/ESP32
+import java.util.ArrayList;     // Import ArrayList to store known objects
 
-Serial myPort;
-String data = "";
-int angle = 0, distance = 0;
-PFont radarFont;
+Serial myPort;                  // Serial object for communication
+String data = "";               // Incoming data string
+int angle = 0, distance = 0;    // Current servo angle and measured distance
+PFont radarFont;                // Font for on-screen text
+
+ArrayList<PVector> knownObjects = new ArrayList<PVector>();  // Stores calibrated/static object positions
+boolean calibrating = true;     // Indicates whether calibration mode is active
+int calibrationTime = 20000;    // Calibration duration (20 seconds)
+int startTime;                  // Timestamp when calibration started
 
 void setup() {
-  size(1400, 800);  // Large screen for better visibility
-  myPort = new Serial(this, "COM4", 9600);
-  myPort.bufferUntil('.');
-  radarFont = createFont("Arial", 24, true);
+  size(1400, 800);              // Set the canvas size
+  myPort = new Serial(this, "COM4", 115200);  // Open serial port at 115200 baud
+  myPort.bufferUntil('.');     // Wait for a period (.) to mark end of each data packet
+  radarFont = createFont("Arial", 24, true);  // Load font for text
+  startTime = millis();        // Record the start time for calibration
 }
 
 void draw() {
-  background(0);
-  drawRadar();
-  drawDetectionLine();
-  drawObject();
-  drawText();
+  background(0);               // Set background to black
+  drawRadar();                 // Draw radar grid and angle lines
+  drawDetectionLine();         // Draw the rotating line based on angle
+
+  if (calibrating) {
+    calibrateObjects();        // If calibrating, collect nearby objects
+  } else {
+    drawObject();              // Otherwise, check and draw new unknown objects
+  }
+
+  drawKnownObjects();          // Draw already calibrated objects
+  drawText();                  // Display angle, distance, and calibration info
+
+  // Stop calibration after set duration
+  if (calibrating && millis() - startTime > calibrationTime) {
+    calibrating = false;
+    println("Calibration complete. Normal operation started.");
+  }
 }
 
+// Handle serial data event
 void serialEvent(Serial myPort) {
-  data = myPort.readStringUntil('.');
+  data = myPort.readStringUntil('.');  // Read data until '.' character
+
   if (data != null) {
-    String[] values = trim(split(data, ','));
+    String[] values = trim(split(data, ','));  // Split the data into angle and distance
     if (values.length == 2) {
-      angle = int(values[0]);
-      distance = int(values[1]);
+      angle = int(values[0]);          // Parse angle
+      distance = int(values[1]);       // Parse distance
     }
   }
 }
 
+// Draw radar background grid and angle lines
 void drawRadar() {
   pushMatrix();
-  translate(width / 2, height - 100);
-  stroke(98, 245, 31);
+  translate(width / 2, height - 100);  // Move origin to bottom center
+
+  stroke(98, 245, 31);       // Green radar color
   strokeWeight(3);
   noFill();
-  
-  float maxRadius = 500; // **Expanded radar size**
-  
+
+  float maxRadius = 500;     // Radar max radius in pixels
+
+  // Draw concentric circles for range
   for (int i = 1; i <= 4; i++) {
     ellipse(0, 0, i * maxRadius / 2, i * maxRadius / 2);
   }
-  
+
+  // Draw angle lines (every 30 degrees)
   for (int i = 0; i <= 180; i += 30) {
     line(0, 0, maxRadius * cos(radians(i)), -maxRadius * sin(radians(i)));
   }
-  
+
   popMatrix();
 }
 
+// Collect objects during calibration (within 100 cm)
+void calibrateObjects() {
+  if (distance <= 100) {
+    float pixDist = map(distance, 0, 100, 0, 500);  // Map distance to screen space
+    float x = pixDist * cos(radians(angle));
+    float y = -pixDist * sin(radians(angle));
+
+    boolean alreadyStored = false;
+
+    // Check if a similar object already exists nearby
+    for (PVector obj : knownObjects) {
+      if (dist(x, y, obj.x, obj.y) < 20) {
+        alreadyStored = true;
+        break;
+      }
+    }
+
+    // If not, store the new object
+    if (!alreadyStored) {
+      knownObjects.add(new PVector(x, y));
+    }
+  }
+}
+
+// Draw unknown object (newly detected not in known list)
 void drawObject() {
   pushMatrix();
   translate(width / 2, height - 100);
-  stroke(255, 10, 10);
-  strokeWeight(8);
-  
-  if (distance <= 100) {  // **Extended detection range to 1 meter**
-    float pixDist = map(distance, 0, 100, 0, 500); // **Scaled to new radar size**
+
+  if (distance <= 100) {
+    float pixDist = map(distance, 0, 100, 0, 500);
     float x = pixDist * cos(radians(angle));
     float y = -pixDist * sin(radians(angle));
-    
-    // Draw an "X" at the detected position
-    line(x - 10, y - 10, x + 10, y + 10);
-    line(x - 10, y + 10, x + 10, y - 10);
+
+    boolean known = false;
+
+    // Check if it's a known object
+    for (PVector obj : knownObjects) {
+      if (dist(x, y, obj.x, obj.y) < 20) {
+        known = true;
+        break;
+      }
+    }
+
+    // If unknown, draw a red 'X' on the radar
+    if (!known) {
+      stroke(255, 10, 10);    // Red
+      strokeWeight(8);
+      line(x - 10, y - 10, x + 10, y + 10);
+      line(x - 10, y + 10, x + 10, y - 10);
+    }
   }
-  
+
   popMatrix();
 }
 
+// Draw all known objects (green dots with glow)
+void drawKnownObjects() {
+  pushMatrix();
+  translate(width / 2, height - 100);
+
+  for (PVector obj : knownObjects) {
+    noStroke();
+
+    // Outer soft glow
+    fill(0, 255, 0, 50);
+    ellipse(obj.x, obj.y, 20, 20);
+
+    // Bright center dot
+    fill(0, 255, 0, 200);
+    ellipse(obj.x, obj.y, 8, 8);
+  }
+
+  popMatrix();
+}
+
+// Draw the detection scanning line
 void drawDetectionLine() {
   pushMatrix();
   translate(width / 2, height - 100);
@@ -79,10 +163,25 @@ void drawDetectionLine() {
   popMatrix();
 }
 
+// Display on-screen text info
 void drawText() {
   fill(98, 245, 31);
   textFont(radarFont);
   textSize(28);
+
+  // Calibration countdown
+  if (calibrating) {
+    text("CALIBRATING... (" + (20 - (millis() - startTime)/1000) + "s left)", 50, height - 100);
+  }
+
+  // Show current angle
   text("Angle: " + angle + "°", 50, height - 50);
-  text("Distance: " + (distance <= 100 ? distance + " cm" : "Out of Range"), 250, height - 50);
+
+  // Show distance if in range
+  if (distance <= 100) {
+    text("Distance: " + distance + " cm", 250, height - 50);
+  } else {
+    text("Distance: Out of Range", 250, height - 50);
+  }
 }
+
