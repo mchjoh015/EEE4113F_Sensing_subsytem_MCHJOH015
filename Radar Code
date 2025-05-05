@@ -1,159 +1,141 @@
-import processing.serial.*;     // Import the serial library for communication with Arduino/ESP32
-import java.util.ArrayList;     // Import ArrayList to store known objects
+import processing.net.*;
+import java.util.ArrayList;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 
-Serial myPort;                  // Serial object for communication
-String data = "";               // Incoming data string
-int angle = 0, distance = 0;    // Current servo angle and measured distance
-PFont radarFont;                // Font for on-screen text
+PFont radarFont;
 
-ArrayList<PVector> knownObjects = new ArrayList<PVector>();  // Stores calibrated/static object positions
-boolean calibrating = true;     // Indicates whether calibration mode is active
-int calibrationTime = 20000;    // Calibration duration (20 seconds)
-int startTime;                  // Timestamp when calibration started
+int angle = 0, distance = 0;
+boolean calibrating = true;
+int calibrationTime = 20000;
+int startTime;
+ArrayList<PVector> knownObjects = new ArrayList<PVector>();
+
+// UDP setup
+DatagramSocket socket;
+byte[] buffer = new byte[1024];
 
 void setup() {
-  size(1400, 800);              // Set the canvas size
-  myPort = new Serial(this, "COM4", 115200);  // Open serial port at 115200 baud
-  myPort.bufferUntil('.');     // Wait for a period (.) to mark end of each data packet
-  radarFont = createFont("Arial", 24, true);  // Load font for text
-  startTime = millis();        // Record the start time for calibration
+  size(1400, 800);
+  radarFont = createFont("Arial", 24, true);
+  startTime = millis();
+
+  try {
+    socket = new DatagramSocket(4210); // Must match udpPort on ESP32
+    socket.setSoTimeout(1); // Prevent blocking
+    println("UDP socket ready.");
+  } catch (Exception e) {
+    println("Failed to open UDP socket: " + e.getMessage());
+  }
 }
 
 void draw() {
-  background(0);               // Set background to black
-  drawRadar();                 // Draw radar grid and angle lines
-  drawDetectionLine();         // Draw the rotating line based on angle
+  background(0);
 
+  // Receive and parse UDP data
+  receiveUDP();
+
+  drawRadar();
+  drawDetectionLine();
   if (calibrating) {
-    calibrateObjects();        // If calibrating, collect nearby objects
+    calibrateObjects();
   } else {
-    drawObject();              // Otherwise, check and draw new unknown objects
+    drawObject();
   }
+  drawKnownObjects();
+  drawText();
 
-  drawKnownObjects();          // Draw already calibrated objects
-  drawText();                  // Display angle, distance, and calibration info
-
-  // Stop calibration after set duration
   if (calibrating && millis() - startTime > calibrationTime) {
     calibrating = false;
     println("Calibration complete. Normal operation started.");
   }
 }
 
-// Handle serial data event
-void serialEvent(Serial myPort) {
-  data = myPort.readStringUntil('.');  // Read data until '.' character
+void receiveUDP() {
+  try {
+    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+    socket.receive(packet);
+    String message = new String(packet.getData(), 0, packet.getLength()).trim();
 
-  if (data != null) {
-    String[] values = trim(split(data, ','));  // Split the data into angle and distance
-    if (values.length == 2) {
-      angle = int(values[0]);          // Parse angle
-      distance = int(values[1]);       // Parse distance
+    // Parse angle and distance
+    if (message.contains(",")) {
+      String[] parts = message.split(",");
+      if (parts.length == 2) {
+        angle = int(parts[0]);
+        distance = int(trim(parts[1].replace(".", ""))); // Remove any trailing "."
+      }
     }
+  } catch (Exception e) {
+    // Do nothing (timeout likely)
   }
 }
 
-// Draw radar background grid and angle lines
 void drawRadar() {
   pushMatrix();
-  translate(width / 2, height - 100);  // Move origin to bottom center
-
-  stroke(98, 245, 31);       // Green radar color
+  translate(width / 2, height - 100);
+  stroke(98, 245, 31);
   strokeWeight(3);
   noFill();
-
-  float maxRadius = 500;     // Radar max radius in pixels
-
-  // Draw concentric circles for range
-  for (int i = 1; i <= 4; i++) {
-    ellipse(0, 0, i * maxRadius / 2, i * maxRadius / 2);
-  }
-
-  // Draw angle lines (every 30 degrees)
-  for (int i = 0; i <= 180; i += 30) {
-    line(0, 0, maxRadius * cos(radians(i)), -maxRadius * sin(radians(i)));
-  }
-
+  float maxRadius = 500;
+  for (int i = 1; i <= 4; i++) ellipse(0, 0, i * maxRadius / 2, i * maxRadius / 2);
+  for (int i = 0; i <= 180; i += 30) line(0, 0, maxRadius * cos(radians(i)), -maxRadius * sin(radians(i)));
   popMatrix();
 }
 
-// Collect objects during calibration (within 100 cm)
 void calibrateObjects() {
   if (distance <= 100) {
-    float pixDist = map(distance, 0, 100, 0, 500);  // Map distance to screen space
+    float pixDist = map(distance, 0, 100, 0, 500);
     float x = pixDist * cos(radians(angle));
     float y = -pixDist * sin(radians(angle));
-
     boolean alreadyStored = false;
-
-    // Check if a similar object already exists nearby
     for (PVector obj : knownObjects) {
       if (dist(x, y, obj.x, obj.y) < 20) {
         alreadyStored = true;
         break;
       }
     }
-
-    // If not, store the new object
-    if (!alreadyStored) {
-      knownObjects.add(new PVector(x, y));
-    }
+    if (!alreadyStored) knownObjects.add(new PVector(x, y));
   }
 }
 
-// Draw unknown object (newly detected not in known list)
 void drawObject() {
   pushMatrix();
   translate(width / 2, height - 100);
-
   if (distance <= 100) {
     float pixDist = map(distance, 0, 100, 0, 500);
     float x = pixDist * cos(radians(angle));
     float y = -pixDist * sin(radians(angle));
-
     boolean known = false;
-
-    // Check if it's a known object
     for (PVector obj : knownObjects) {
       if (dist(x, y, obj.x, obj.y) < 20) {
         known = true;
         break;
       }
     }
-
-    // If unknown, draw a red 'X' on the radar
     if (!known) {
-      stroke(255, 10, 10);    // Red
+      stroke(255, 10, 10);
       strokeWeight(8);
       line(x - 10, y - 10, x + 10, y + 10);
       line(x - 10, y + 10, x + 10, y - 10);
     }
   }
-
   popMatrix();
 }
 
-// Draw all known objects (green dots with glow)
 void drawKnownObjects() {
   pushMatrix();
   translate(width / 2, height - 100);
-
   for (PVector obj : knownObjects) {
     noStroke();
-
-    // Outer soft glow
     fill(0, 255, 0, 50);
     ellipse(obj.x, obj.y, 20, 20);
-
-    // Bright center dot
     fill(0, 255, 0, 200);
     ellipse(obj.x, obj.y, 8, 8);
   }
-
   popMatrix();
 }
 
-// Draw the detection scanning line
 void drawDetectionLine() {
   pushMatrix();
   translate(width / 2, height - 100);
@@ -163,25 +145,12 @@ void drawDetectionLine() {
   popMatrix();
 }
 
-// Display on-screen text info
 void drawText() {
   fill(98, 245, 31);
   textFont(radarFont);
   textSize(28);
-
-  // Calibration countdown
-  if (calibrating) {
-    text("CALIBRATING... (" + (20 - (millis() - startTime)/1000) + "s left)", 50, height - 100);
-  }
-
-  // Show current angle
+  if (calibrating) text("CALIBRATING... (" + (20 - (millis() - startTime)/1000) + "s left)", 50, height - 100);
   text("Angle: " + angle + "°", 50, height - 50);
-
-  // Show distance if in range
-  if (distance <= 100) {
-    text("Distance: " + distance + " cm", 250, height - 50);
-  } else {
-    text("Distance: Out of Range", 250, height - 50);
-  }
+  if (distance <= 100) text("Distance: " + distance + " cm", 250, height - 50);
+  else text("Distance: Out of Range", 250, height - 50);
 }
-
