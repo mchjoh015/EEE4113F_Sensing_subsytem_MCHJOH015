@@ -8,11 +8,11 @@ PFont radarFont;
 
 int angle = 0, distance = 0;
 boolean calibrating = true;
-int calibrationTime = 20000;
+int calibrationTime = 20000; // Calibration duration in milliseconds (20 seconds)
 int startTime;
-ArrayList<PVector> knownObjects = new ArrayList<PVector>();
+ArrayList<PVector> knownObjects = new ArrayList<PVector>(); // Store detected objects during calibration
 
-// UDP setup
+// UDP socket setup variables
 DatagramSocket socket;
 byte[] buffer = new byte[1024];
 
@@ -22,8 +22,8 @@ void setup() {
   startTime = millis();
 
   try {
-    socket = new DatagramSocket(4210); // Must match udpPort on ESP32
-    socket.setSoTimeout(1); // Prevent blocking
+    socket = new DatagramSocket(4210); // Bind UDP socket to port 4210 (must match ESP32)
+    socket.setSoTimeout(1);            // Non-blocking receive with short timeout to avoid freeze
     println("UDP socket ready.");
   } catch (Exception e) {
     println("Failed to open UDP socket: " + e.getMessage());
@@ -33,19 +33,21 @@ void setup() {
 void draw() {
   background(0);
 
-  // Receive and parse UDP data
-  receiveUDP();
+  receiveUDP();  // Attempt to receive incoming UDP packets containing angle,distance data
 
-  drawRadar();
-  drawDetectionLine();
+  drawRadar();        // Draw radar concentric circles and angle lines
+  drawDetectionLine(); // Draw radar scanning line corresponding to current angle
+
   if (calibrating) {
-    calibrateObjects();
+    calibrateObjects();  // Store detected objects during calibration phase
   } else {
-    drawObject();
+    drawObject();       // Highlight any newly detected objects outside calibration map
   }
-  drawKnownObjects();
-  drawText();
+  
+  drawKnownObjects();  // Draw all stored known objects on radar
+  drawText();          // Display calibration status, angle, and distance info
 
+  // End calibration after specified time
   if (calibrating && millis() - startTime > calibrationTime) {
     calibrating = false;
     println("Calibration complete. Normal operation started.");
@@ -55,19 +57,20 @@ void draw() {
 void receiveUDP() {
   try {
     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-    socket.receive(packet);
+    socket.receive(packet); // Receive UDP packet (non-blocking due to timeout)
     String message = new String(packet.getData(), 0, packet.getLength()).trim();
 
-    // Parse angle and distance
+    // Expect message format: "angle,distance"
     if (message.contains(",")) {
       String[] parts = message.split(",");
       if (parts.length == 2) {
         angle = int(parts[0]);
-        distance = int(trim(parts[1].replace(".", ""))); // Remove any trailing "."
+        // Remove trailing dot if any, then parse distance as integer
+        distance = int(trim(parts[1].replace(".", "")));
       }
     }
   } catch (Exception e) {
-    // Do nothing (timeout likely)
+    // Timeout or no packet received is expected here, so no error handling needed
   }
 }
 
@@ -77,28 +80,38 @@ void drawRadar() {
   stroke(98, 245, 31);
   strokeWeight(3);
   noFill();
+  
   float maxRadius = 500;
+  // Draw 4 concentric circles to represent distance increments
   for (int i = 1; i <= 4; i++) ellipse(0, 0, i * maxRadius / 2, i * maxRadius / 2);
-  for (int i = 0; i <= 180; i += 30) line(0, 0, maxRadius * cos(radians(i)), -maxRadius * sin(radians(i)));
+  
+  // Draw radial lines every 30 degrees from 0° to 180°
+  for (int i = 0; i <= 180; i += 30)
+    line(0, 0, maxRadius * cos(radians(i)), -maxRadius * sin(radians(i)));
   popMatrix();
 }
 
+// During calibration, add objects if they are not already stored nearby
 void calibrateObjects() {
-  if (distance <= 100) {
-    float pixDist = map(distance, 0, 100, 0, 500);
+  if (distance <= 100) { // Only consider objects within 100 cm range
+    float pixDist = map(distance, 0, 100, 0, 500); // Map distance to radar pixels
     float x = pixDist * cos(radians(angle));
     float y = -pixDist * sin(radians(angle));
     boolean alreadyStored = false;
+    
+    // Check if object is already known (within 20 pixel radius)
     for (PVector obj : knownObjects) {
       if (dist(x, y, obj.x, obj.y) < 20) {
         alreadyStored = true;
         break;
       }
     }
+    // Add new object to known list if not already present
     if (!alreadyStored) knownObjects.add(new PVector(x, y));
   }
 }
 
+// After calibration, highlight unknown detected objects as red crosses
 void drawObject() {
   pushMatrix();
   translate(width / 2, height - 100);
@@ -107,12 +120,15 @@ void drawObject() {
     float x = pixDist * cos(radians(angle));
     float y = -pixDist * sin(radians(angle));
     boolean known = false;
+    
+    // Check if detected object matches any known object within threshold
     for (PVector obj : knownObjects) {
       if (dist(x, y, obj.x, obj.y) < 20) {
         known = true;
         break;
       }
     }
+    // If unknown, draw a prominent red cross at detected position
     if (!known) {
       stroke(255, 10, 10);
       strokeWeight(8);
@@ -123,19 +139,21 @@ void drawObject() {
   popMatrix();
 }
 
+// Draw all previously calibrated objects as green circles on the radar
 void drawKnownObjects() {
   pushMatrix();
   translate(width / 2, height - 100);
   for (PVector obj : knownObjects) {
     noStroke();
-    fill(0, 255, 0, 50);
+    fill(0, 255, 0, 50);    // Transparent green outer circle
     ellipse(obj.x, obj.y, 20, 20);
-    fill(0, 255, 0, 200);
+    fill(0, 255, 0, 200);   // Solid green inner circle
     ellipse(obj.x, obj.y, 8, 8);
   }
   popMatrix();
 }
 
+// Draw the radar's detection line at the current scanning angle
 void drawDetectionLine() {
   pushMatrix();
   translate(width / 2, height - 100);
@@ -145,12 +163,19 @@ void drawDetectionLine() {
   popMatrix();
 }
 
+// Display status text (calibration countdown, angle, and distance)
 void drawText() {
   fill(98, 245, 31);
   textFont(radarFont);
   textSize(28);
-  if (calibrating) text("CALIBRATING... (" + (20 - (millis() - startTime)/1000) + "s left)", 50, height - 100);
+  
+  if (calibrating)
+    text("CALIBRATING... (" + (20 - (millis() - startTime)/1000) + "s left)", 50, height - 100);
+  
   text("Angle: " + angle + "°", 50, height - 50);
-  if (distance <= 100) text("Distance: " + distance + " cm", 250, height - 50);
-  else text("Distance: Out of Range", 250, height - 50);
+  
+  if (distance <= 100)
+    text("Distance: " + distance + " cm", 250, height - 50);
+  else
+    text("Distance: Out of Range", 250, height - 50);
 }
