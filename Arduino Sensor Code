@@ -3,75 +3,82 @@
 #include <ESP32Servo.h>  // Servo library
 
 // WiFi credentials
-const char* ssid = "Voutsas_Wifi";
-const char* password = "greenapple";
+const char* ssid = "Esp32";
+const char* password = "onetwothree";
 
 // IP address of the PC running Processing (change this!)
 const char* udpAddress = "192.168.0.144";  // <- Replace with your computer's IP
-const int udpPort = 4210;
+const int udpPort = 4210;                   // Port number for UDP communication
 
 // Pin definitions
 const int SERVO_PIN = 12;  // Servo signal pin
-const int TRIG_PIN = 14;   // HC-SR04 Trig pin
-const int ECHO_PIN = 27;   // HC-SR04 Echo pin
+const int TRIG_PIN = 14;   // HC-SR04 ultrasonic sensor Trigger pin
+const int ECHO_PIN = 27;   // HC-SR04 ultrasonic sensor Echo pin
 
-Servo myServo;
-WiFiUDP udp;
+Servo myServo;             // Servo object
+WiFiUDP udp;               // UDP object for network communication
 
 void setup() {
   Serial.begin(115200);
-    delay(1000);
+  delay(1000);
 
-    WiFi.mode(WIFI_STA); //Optional
-    WiFi.begin(ssid, password);
-    Serial.println("\nConnecting");
+  // Connect to WiFi network as station
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  Serial.println("\nConnecting");
 
-    while(WiFi.status() != WL_CONNECTED){
-        Serial.print(".");
-        delay(1000);
-    }
+  // Wait until connected
+  while(WiFi.status() != WL_CONNECTED){
+      Serial.print(".");
+      delay(1000);
+  }
 
-    Serial.println("\nConnected to the WiFi network");
-    Serial.print("Local ESP32 IP: ");
-    Serial.println(WiFi.localIP());
+  Serial.println("\nConnected to the WiFi network");
+  Serial.print("Local ESP32 IP: ");
+  Serial.println(WiFi.localIP());
 
-  // Set up pins
+  // Initialize pins and servo
   myServo.attach(SERVO_PIN);
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
 }
 
 void loop() {
-  // Sweep from 0 to 180 degrees
+  // Sweep servo from 0 to 180 degrees
   for (int angle = 0; angle <= 180; angle++) {
-    myServo.write(angle);
-    delay(100);
+    myServo.write(angle);      // Set servo position
+    delay(100);                // Wait for servo to reach position
 
-    long distance = measureDistance();
-    sendUDP(angle, distance);
+    long distance = measureDistance();  // Measure distance from ultrasonic sensor
+    sendUDP(angle, distance);            // Send angle and distance over UDP
   }
 
-  // Sweep back from 180 to 0 degrees
+  // Sweep servo back from 180 to 0 degrees
   for (int angle = 180; angle >= 0; angle--) {
-    myServo.write(angle);
-    delay(100);
+    myServo.write(angle);      // Set servo position
+    delay(100);                // Wait for servo to reach position
 
-    long distance = measureDistance();
-    sendUDP(angle, distance);
+    long distance = measureDistance();  // Measure distance from ultrasonic sensor
+    sendUDP(angle, distance);            // Send angle and distance over UDP
   }
 }
 
-// Function to measure distance using HC-SR04
+// Measures distance using HC-SR04 ultrasonic sensor
 long measureDistance() {
+  // Send 10 microseconds pulse to trigger pin
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
 
-  long duration = pulseIn(ECHO_PIN, HIGH, 25000); // timeout at 25 ms
+  // Read pulse duration on echo pin (timeout after 25 ms)
+  long duration = pulseIn(ECHO_PIN, HIGH, 25000);
+
+  // Convert duration to distance in centimeters
   long distanceCm = duration * 0.0343 / 2;
 
+  // If no valid reading or out of range, set max distance 400 cm
   if (distanceCm == 0 || distanceCm > 400) {
     distanceCm = 400;
   }
@@ -79,16 +86,13 @@ long measureDistance() {
   return distanceCm;
 }
 
-// Function to send angle and distance via UDP
+// Sends angle and distance data via UDP to the PC
 void sendUDP(int angle, long distance) {
-  String message = String(angle) + "," + String(distance) + ".";
-  udp.beginPacket(udpAddress, udpPort);
-  udp.print(message);
-  udp.endPacket();
+  String message = String(angle) + "," + String(distance) + ".";  // Format: "angle,distance."
+  udp.beginPacket(udpAddress, udpPort);  // Prepare UDP packet to destination IP and port
+  udp.print(message);                     // Write message to packet
+  udp.endPacket();                        // Send UDP packet
 
-  Serial.println(message);  // For debugging
-}
-  
-  return distanceCm;
+  Serial.println(message);  // Print sent message to serial monitor for debugging
 }
 
