@@ -4,7 +4,7 @@ This repository contains the complete software and resources for a radar-based d
 Project Structure
 The repository is divided into the following key sections:
 
-1. Arduino Sensor Code
+1. Arduino Sensor Code:
 Platform: ESP32 (Arduino IDE)
 
 Function: Controls the SG90 servo motor to sweep across a 180° range and back.
@@ -15,14 +15,14 @@ Output: Sends angle and distance measurements for radar visualization.
 
 Note: Includes embedded WiFi connection code to transmit data over a network.
 
-2. WiFi Connection Code (Standalone Test)
+2. WiFi Connection Code (Standalone Test):
 Purpose: Verifies WiFi connectivity of the ESP32 module.
 
 Usage: Provided separately to test and debug network issues.
 
 Note: This functionality is already integrated into the Arduino Sensor Code but is available here for standalone testing.
 
-3. Radar GUI Code
+3. Radar GUI Code:
 Function: Implements a radar-like graphical user interface (GUI) on a computer.
 
 Features:
@@ -40,7 +40,7 @@ Format: [Specify format, e.g., .STL, .F3D, etc.]
 
 Purpose: Provides mechanical design support for physical assembly.
 
-🛠️ Hardware Used
+Hardware Used:
 ESP32 Dev Board
 
 HC-SR04 Ultrasonic Sensor
