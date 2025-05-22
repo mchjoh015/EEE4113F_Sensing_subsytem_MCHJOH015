@@ -41,21 +41,22 @@ Format: [Specify format, e.g., .STL, .F3D, etc.]
 Purpose: Provides mechanical design support for physical assembly.
 
 Hardware Used:
-ESP32 Dev Board
+1. ESP32 Dev Board
 
-HC-SR04 Ultrasonic Sensor
+2. HC-SR04 Ultrasonic Sensor
 
-SG90 Servo Motor
+3. SG90 Servo Motor
 
-3D-printed sensor housing (provided CAD)
+4. 3D-printed sensor housing (provided CAD)
 
-Getting Started
-Upload the Arduino Sensor Code to the ESP32 using the Arduino IDE.
+Getting Started:
 
-Ensure WiFi credentials are correctly entered in the code.
+1.Upload the Arduino Sensor Code to the ESP32 using the Arduino IDE.
 
-Run the Radar GUI Code on your PC to visualize detections.
+2.Ensure WiFi credentials are correctly entered in the code.
 
-Use the WiFi Test Code if you're experiencing connectivity issues.
+3.Run the Radar GUI Code on your PC to visualize detections.
 
-3D-print the housing using the provided CAD files for accurate sensor mounting.
+4.Use the WiFi Test Code if you're experiencing connectivity issues.
+
+5.3D-print the housing using the provided CAD files for accurate sensor mounting.
